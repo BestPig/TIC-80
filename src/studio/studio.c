@@ -2086,6 +2086,9 @@ static void processMouseStates(Studio* studio)
 
 static void blitCursor(Studio* studio)
 {
+    #ifdef SWITCH
+    return;
+    #endif
     tic_mem* tic = studio->tic;
     tic80_mouse* m = &tic->ram->input.mouse;
 

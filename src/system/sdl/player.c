@@ -25,6 +25,11 @@
 #include <SDL.h>
 #include <tic80.h>
 
+#if defined(SWITCH)
+#include <unistd.h>
+#include <switch.h>
+#endif
+
 #define TIC80_WINDOW_SCALE 3
 #define TIC80_WINDOW_TITLE "TIC-80"
 #define TIC80_DEFAULT_CART "cart.tic"
@@ -62,6 +67,14 @@ static void audioCallback(void* userdata, u8* stream, s32 len)
     SDL_UnlockMutex(state.mutex);
 }
 
+#if defined(SWITCH)
+void initJoycons() {
+    for (int i = 0; i < 2; i++) {
+        SDL_Joystick *joy = SDL_JoystickOpen(i);
+    }
+}
+#endif
+
 s32 runCart(void* cart, s32 size)
 {
     s32 output = 0;
@@ -80,7 +93,12 @@ s32 runCart(void* cart, s32 size)
     }
     else 
     {
+        #if defined(SWITCH)
+        SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK);
+        initJoycons();
+        #else
         SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
+        #endif
 
         SDL_Window* window = SDL_CreateWindow(TIC80_WINDOW_TITLE, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, TIC80_FULLWIDTH * TIC80_WINDOW_SCALE, TIC80_FULLHEIGHT * TIC80_WINDOW_SCALE, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
         SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
@@ -205,6 +223,7 @@ s32 runCart(void* cart, s32 size)
         SDL_DestroyWindow(window);
         SDL_CloseAudioDevice(audioDevice);
         SDL_DestroyMutex(state.mutex);
+        SDL_Quit();
     }
 
     SDL_free(cart);

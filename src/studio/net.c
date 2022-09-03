@@ -367,7 +367,7 @@ void tic_net_end(tic_net *net)
     LightLock_Unlock(&net->tick_lock);
 }
 
-#elif defined(BAREMETALPI)
+#elif defined(BAREMETALPI) || defined(SWITCH)
 
 tic_net* tic_net_create(const char* host) {return NULL;}
 void tic_net_get(tic_net* net, const char* url, net_get_callback callback, void* calldata) {}

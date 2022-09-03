@@ -60,7 +60,7 @@ message("VERSION_HASH: ${VERSION_HASH}")
 
 configure_file("${PROJECT_SOURCE_DIR}/version.h.in" "${CMAKE_CURRENT_BINARY_DIR}/version.h")
 
-if(ANDROID OR EMSCRIPTEN OR N3DS OR RPI)
+if(ANDROID OR EMSCRIPTEN OR N3DS OR RPI OR SWITCH)
     set(BUILD_LIBRETRO_DEFAULT OFF)
     set(BUILD_DEMO_CARTS_DEFAULT OFF)
     set(BUILD_PLAYER_DEFAULT OFF)
@@ -86,7 +86,7 @@ if(NOT BUILD_SDL)
     set(BUILD_SDLGPU OFF)
 endif()
 
-if(NOT N3DS AND NOT EMSCRIPTEN AND NOT BAREMETALPI)
+if(NOT N3DS AND NOT EMSCRIPTEN AND NOT BAREMETALPI AND NOT SWITCH)
     set(USE_LIBUV TRUE)
 endif()
 
@@ -94,7 +94,7 @@ message("BUILD_SDLGPU: ${BUILD_SDLGPU}")
 message("BUILD_TOUCH_INPUT: ${BUILD_TOUCH_INPUT}")
 message("BUILD_STUB: ${BUILD_STUB}")
 
-if (N3DS)
+if (N3DS OR SWITCH)
     set(BUILD_SDL off)
 endif()
 
@@ -105,7 +105,7 @@ endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Dd_m3LogOutput=0")
 
-if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID AND NOT N3DS)
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID AND NOT N3DS AND NOT SWITCH)
     set(LINUX TRUE)
 endif()
 
@@ -657,7 +657,20 @@ endif()
 # ZLIB
 ################################
 
-if (NOT N3DS)
+if (N3DS)
+
+add_library(zlib STATIC IMPORTED)
+set_target_properties( zlib PROPERTIES IMPORTED_LOCATION ${DEVKITPRO}/portlibs/3ds/lib/libz.a )
+target_include_directories(zlib INTERFACE ${DEVKITPRO}/portlibs/3ds/include)
+
+elseif (SWITCH)
+
+add_library(zlib STATIC IMPORTED)
+set_target_properties( zlib PROPERTIES IMPORTED_LOCATION ${DEVKITPRO}/portlibs/switch/lib/libz.a )
+target_include_directories(zlib INTERFACE ${DEVKITPRO}/portlibs/switch/include)
+
+
+else ()
 
 set(ZLIB_DIR ${THIRDPARTY_DIR}/zlib)
 set(ZLIB_SRC
@@ -676,12 +689,6 @@ set(ZLIB_SRC
 
 add_library(zlib STATIC ${ZLIB_SRC})
 target_include_directories(zlib INTERFACE ${THIRDPARTY_DIR}/zlib)
-
-else ()
-
-add_library(zlib STATIC IMPORTED)
-set_target_properties( zlib PROPERTIES IMPORTED_LOCATION ${DEVKITPRO}/portlibs/3ds/lib/libz.a )
-target_include_directories(zlib INTERFACE ${DEVKITPRO}/portlibs/3ds/include)
 
 endif ()
 
@@ -911,6 +918,10 @@ if(BUILD_SDLGPU)
     target_compile_definitions(tic80studio PUBLIC CRT_SHADER_SUPPORT)
 endif()
 
+if(SWITCH)
+    target_link_libraries(tic80core nx)
+endif()
+
 target_compile_definitions(tic80studio PUBLIC BUILD_EDITORS)
 
 ################################
@@ -1128,6 +1139,52 @@ if(N3DS)
                COMMAND ${CMAKE_SOURCE_DIR}/build/n3ds/elf_to_3dsx.sh
            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/build
     )
+endif()
+
+################################
+# TIC-80 app (SWITCH)
+################################
+
+if(SWITCH)
+    set(CMAKE_C_FLAGS "-O2 -ffunction-sections -fdata-sections -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE -ftls-model=local-exec")
+    set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
+
+    list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/build/switch/cmake/)
+    set(TIC80_SRC ${TIC80_SRC}
+        ${CMAKE_SOURCE_DIR}/src/system/sdl/main.c
+    )
+
+    add_executable(tic80_switch ${TIC80_SRC})
+
+    target_include_directories(tic80_switch PRIVATE
+        ${DEVKITPRO}/libnx/include
+        ${DEVKITPRO}/portlibs/switch/include/SDL2
+        ${SDL2_INCLUDE_DIRS}
+        ${DEVKITPRO}/portlibs/switch/include
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/src)
+
+    include(CMakePrintHelpers)
+    cmake_print_variables(CMAKE_SOURCE_DIR)
+
+
+    add_definitions(-D__SWITCH__)
+    add_definitions(-D__LIBNX__)
+
+    target_link_directories(tic80_switch PRIVATE ${DEVKITPRO}/libnx/lib ${DEVKITPRO}/portlibs/switch/lib)
+    target_link_libraries(tic80_switch tic80studio png zlib m nx SDL2main SDL2 SDL2_ttf -lglad -lEGL -lglapi -ldrm_nouveau)
+
+    set_target_properties(tic80_switch PROPERTIES
+        LINKER_LANGUAGE CXX
+        LINK_FLAGS "-specs=${LIBNX}/switch.specs -Wl,-Map,tic80_switch.map"
+        )
+
+    add_custom_command(TARGET tic80_switch
+        POST_BUILD
+            COMMAND nacptool --create "TIC-80" "BestPig" "1.0.0" ${CMAKE_PROJECT_NAME}.nacp
+            COMMAND elf2nro bin/tic80_switch bin/tic-80.nro --nacp=${CMAKE_PROJECT_NAME}.nacp --icon=${CMAKE_SOURCE_DIR}/build/switch/icon.jpg
+    )
+    #SDL2 SDL2_gfx SDL2_image SDL2_mixer SDL2_net SDL2_test SDL2_ttf)
 endif()
 
 ################################

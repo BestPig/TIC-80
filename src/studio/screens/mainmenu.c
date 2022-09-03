@@ -212,13 +212,17 @@ static const MenuItem OptionMenu[] =
 #if defined(CRT_SHADER_SUPPORT)
     {"CRT MONITOR",     NULL,   &CrtMonitorOption},
 #endif
-#if defined(BUILD_EDITORS)
+#if defined(BUILD_EDITORS) && !defined(SWITCH)
     {"DEV MODE",        NULL,   &DevModeOption, "The game menu is disabled in dev mode."},
 #endif
+#if !defined(SWITCH)
     {"VSYNC",           NULL,   &VSyncOption, "VSYNC needs restart!"},
     {"FULLSCREEN",      NULL,   &FullscreenOption},
+#endif
     {"VOLUME",          NULL,   &VolumeOption},
+#if !defined(SWITCH)
     {"SETUP GAMEPAD",   showGamepadMenu},
+#endif
     {""},
     {"BACK",            showMainMenu, .back = true},
 };
@@ -324,7 +328,7 @@ static const MenuItem MainMenu[] =
     {"GAME MENU",   showGameMenu},
     {"RESUME GAME", onResumeGame},
     {"RESET GAME",  onResetGame},
-#if defined(BUILD_EDITORS)
+#if defined(BUILD_EDITORS) && !defined(SWITCH)
     {"CLOSE GAME",  onExitGame},
 #endif
     {"OPTIONS",     showOptionsMenu},

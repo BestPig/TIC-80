@@ -45,8 +45,15 @@
 #include <windows.h>
 #endif
 
-#if defined(__TIC_ANDROID__)
+#if defined(__TIC_ANDROID__) || defined(SWITCH)
 #include <sys/stat.h>
+#endif
+
+#if defined(SWITCH)
+#include <unistd.h>
+#include <switch.h>
+
+void gotoSurf(Studio* studio);
 #endif
 
 #if defined(TOUCH_INPUT_SUPPORT)
@@ -181,6 +188,44 @@ static struct
 }
 #endif
 ;
+
+#define TRACE(fmt,...) printf("%s: " fmt "\n", __PRETTY_FUNCTION__, ## __VA_ARGS__)
+#if defined(SWITCH)
+
+static int s_nxlinkSock = -1;
+
+static void initNxLink()
+{
+    if (R_FAILED(socketInitializeDefault()))
+        return;
+
+    s_nxlinkSock = nxlinkStdio();
+    if (s_nxlinkSock >= 0)
+        TRACE("printf output now goes to nxlink server");
+    else
+        socketExit();
+}
+
+static void deinitNxLink()
+{
+    if (s_nxlinkSock >= 0)
+    {
+        close(s_nxlinkSock);
+        socketExit();
+        s_nxlinkSock = -1;
+    }
+}
+
+void userAppInit()
+{
+    initNxLink();
+}
+
+void userAppExit()
+{
+    deinitNxLink();
+}
+#endif
 
 static void destoryTexture(Texture texture)
 {
@@ -672,6 +717,7 @@ static void processMouse()
 
 static void processKeyboard()
 {
+    //return;
     tic80_input* input = &platform.input;
 
     {
@@ -692,8 +738,9 @@ static void processKeyboard()
 #if defined(TOUCH_INPUT_SUPPORT)
             || platform.keyboard.touch.state[i]
 #endif
-            )
+            ) {
             input->keyboard.keys[c++] = i;
+            }
 
 #if defined(TOUCH_INPUT_SUPPORT)
     if(platform.keyboard.touch.state[tic_key_board])
@@ -964,7 +1011,7 @@ static void processJoysticks()
                         gamepad->x = SDL_JoystickGetButton(joystick, 2);
                         gamepad->y = SDL_JoystickGetButton(joystick, 3);
 
-                        if(numButtons >= 8)
+                        if(numButtons >= 8) // R on Switch
                         {
                             // !TODO: We have to find a better way to handle gamepad MENU button
                             // atm we show game menu for only Pause Menu button on XBox one controller
@@ -973,8 +1020,12 @@ static void processJoysticks()
 
                             if(back)
                             {
+                                #if defined(SWITCH)
+                                gotoSurf(platform.studio);
+                                #else
                                 tic80_input* input = &platform.input;
                                 input->keyboard.keys[0] = tic_key_escape;
+                                #endif
                             }
                         }
                     }
@@ -1177,6 +1228,12 @@ static void pollEvents()
         case SDL_QUIT:
             studio_exit(platform.studio);
             break;
+        #if defined(SWITCH)
+        case SDL_JOYBUTTONDOWN:
+            if (event.jbutton.button == 10) // PLUS
+                studio_exit(platform.studio);
+            break;
+        #endif
         default:
             break;
         }
@@ -1205,7 +1262,6 @@ bool tic_sys_keyboard_text(char* text)
     if(platform.keyboard.touch.useText)
         return false;
 #endif
-
     *text = platform.keyboard.text;
     return true;
 }
@@ -1324,6 +1380,10 @@ static const char* getAppFolder()
         const char AppFolder[] = "/" TIC_NAME "/";
         strcat(appFolder, AppFolder);
         mkdir(appFolder, 0700);
+
+#elif defined(SWITCH)
+    mkdir("sdmc:/switch/tic-80/", 0700);
+    return "sdmc:/switch/tic-80/";
 
 #else
 
@@ -1656,9 +1716,24 @@ static void emsGpuTick()
 
 #endif
 
+#if defined(SWITCH)
+void initJoycons() {
+    for (int i = 0; i < 2; i++) {
+        SDL_Joystick *joy = SDL_JoystickOpen(i);
+        if (joy != NULL) {
+            platform.gamepad.ports[i] = joy;
+        }
+    }
+}
+#endif
+
 static s32 start(s32 argc, char **argv, const char* folder)
 {
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK);
+    SDL_EventState(SDL_TEXTEDITING, SDL_ENABLE);
+    #if defined(SWITCH)
+    initJoycons();
+    #endif
     platform.studio = studio_create(argc, argv, TIC80_SAMPLERATE, SCREEN_FORMAT, folder);
 
     SCOPE(studio_delete(platform.studio))
@@ -1744,6 +1819,7 @@ static s32 start(s32 argc, char **argv, const char* folder)
             SDL_DestroyMutex(platform.audio.mutex);
         }
     }
+    SDL_Quit();
 
     return 0;
 }
@@ -1849,6 +1925,10 @@ s32 main(s32 argc, char **argv)
          }, folder, emsStart, argc, argv
     );
 
+#elif defined(SWITCH)
+    char *fake_argv[] = { argv[0], "--cmd=surf", 0 };
+    int ret = start(2, fake_argv, folder);
+    return ret;
 #else
 
     return start(argc, argv, folder);
